@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- MAGIczna LINijKA NAPRAWIAJĄCA GŁOS NA GITHUB PAGES -->
+    <meta name="referrer" content="no-referrer">
+    
     <title>English Play Area - Preschool</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -458,7 +461,7 @@
         let currentAudio = null;
         let systemVoices = [];
 
-        // --- Inicjalizacja Głosów Systemowych (ładuje lepsze głosy w tle) ---
+        // --- Inicjalizacja Głosów Systemowych (jako ostateczny zapas) ---
         if ('speechSynthesis' in window) {
             systemVoices = window.speechSynthesis.getVoices();
             window.speechSynthesis.onvoiceschanged = () => {
@@ -470,7 +473,6 @@
         function toggleSettingsModal() {
             const modal = document.getElementById('settings-modal');
             if (modal.classList.contains('hidden')) {
-                // Załaduj aktualne stany do checkboxów
                 document.getElementById('setting-reduce-motion').checked = currentState.settings.reduceMotion;
                 document.getElementById('setting-high-contrast').checked = currentState.settings.highContrast;
                 document.getElementById('setting-hide-scores').checked = currentState.settings.hideScores;
@@ -496,28 +498,25 @@
             const body = document.body;
             const starsDisplay = document.getElementById('stars-display');
             
-            // Motion
             if (currentState.settings.reduceMotion) body.classList.add('reduce-motion');
             else body.classList.remove('reduce-motion');
             
-            // Contrast
             if (currentState.settings.highContrast) body.classList.add('high-contrast');
             else body.classList.remove('high-contrast');
             
-            // Scores
             if (currentState.settings.hideScores) starsDisplay.style.display = 'none';
             else starsDisplay.style.display = 'flex';
         }
 
-        // --- DŹWIĘKI I GŁOS ---
+        // --- DŹWIĘKI I GŁOS (Zabezpieczone przed GitHub/CORS) ---
         function playHighQualityVoice(text, onComplete = null) {
             if (currentAudio) { currentAudio.pause(); currentAudio = null; }
 
-            // Zapobiega podwójnemu odtworzeniu słowa w przypadku błędu z serwerem Google
-            let fallbackTriggered = false;
+            // Zmienna zapobiegająca podwójnemu uruchomieniu głosu awaryjnego
+            let isFallbackTriggered = false;
             const triggerFallback = () => {
-                if (fallbackTriggered) return;
-                fallbackTriggered = true;
+                if (isFallbackTriggered) return;
+                isFallbackTriggered = true;
                 fallbackToSystemVoice(text, onComplete);
             };
 
@@ -525,14 +524,19 @@
             currentAudio = new Audio(url);
             currentAudio.onended = () => { if (onComplete) onComplete(); };
             
-            // Obsługa błędu sieciowego (np. CORS na GitHub Pages)
+            // Reagujemy tylko raz, jeśli API Google mimo wszystko wyrzuci błąd
             currentAudio.onerror = triggerFallback;
-            currentAudio.play().catch(triggerFallback);
+            
+            const playPromise = currentAudio.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    triggerFallback();
+                });
+            }
         }
 
         function fallbackToSystemVoice(text, onComplete) {
             if ('speechSynthesis' in window) {
-                // Przerywamy poprzednie mówienie, aby nie było "kolejkowania"
                 window.speechSynthesis.cancel(); 
                 
                 const utterance = new SpeechSynthesisUtterance(text);
@@ -540,7 +544,6 @@
                 utterance.rate = 0.9; 
                 utterance.pitch = 1.1;
                 
-                // Szukamy najlepszego z dostępnych brytyjskich głosów
                 let bestVoice = systemVoices.find(v => v.lang === 'en-GB' && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Hazel') || v.name.includes('Martha')));
                 if (!bestVoice) bestVoice = systemVoices.find(v => v.lang.startsWith('en-GB'));
                 if (!bestVoice) bestVoice = systemVoices.find(v => v.lang.startsWith('en-US'));
