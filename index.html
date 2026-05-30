@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>English Play Area - Preschool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: #f0f9ff;
+            touch-action: manipulation;
+            overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* Animacje Standardowe */
+        @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
+        .animate-pop { animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px) rotate(-5deg); } 75% { transform: translateX(10px) rotate(5deg); } }
+        .animate-shake { animation: shake 0.4s ease-in-out; }
+
+        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-8px); } 100% { transform: translateY(0px); } }
+        .animate-float { animation: float 3s ease-in-out infinite; }
+
+        @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); } 50% { box-shadow: 0 0 20px 10px rgba(59, 130, 246, 0.3); } }
+        .is-playing-audio { animation: pulse-glow 1s infinite; border-color: #3b82f6 !important; }
+
+        /* Karty standardowe */
+        .card { transition: all 0.2s; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+        .card:hover, .card:active { transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
+
+        /* Karty Memory */
+        .memory-card { perspective: 1000px; aspect-ratio: 1; }
+        .memory-card-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1); transform-style: preserve-3d; cursor: pointer; }
+        .memory-card.flipped .memory-card-inner { transform: rotateY(180deg); }
+        .memory-card-front, .memory-card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 1.5rem; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .memory-card-front { background-color: #e2e8f0; border: 4px solid #cbd5e1; font-size: 3rem; color: #94a3b8; }
+        .memory-card-front::after { content: '?'; font-weight: 900; }
+        .memory-card-back { background-color: white; border: 4px solid #818cf8; transform: rotateY(180deg); flex-direction: column; }
+        .memory-card.matched .memory-card-back { background-color: #dcfce7; border-color: #22c55e; opacity: 0.9; }
+
+        /* SPE: REDUCE MOTION (Wyłączenie animacji) */
+        body.reduce-motion * {
+            animation: none !important;
+            transition: none !important;
+        }
+        body.reduce-motion .card:hover, body.reduce-motion .card:active { transform: none !important; }
+
+        /* SPE: HIGH CONTRAST (Wysoki kontrast) */
+        body.high-contrast { background-color: #121212 !important; color: #ffffff !important; }
+        body.high-contrast header { background-color: #1e1e1e !important; border-bottom: 2px solid #333; }
+        body.high-contrast .card, body.high-contrast .bg-white { 
+            background-color: #1e1e1e !important; 
+            border: 4px solid #fff !important; 
+            color: #fff !important; 
+            box-shadow: none !important; 
+        }
+        body.high-contrast .text-slate-400, body.high-contrast .text-slate-500, body.high-contrast .text-slate-600, body.high-contrast .text-slate-700, body.high-contrast .text-slate-800 { color: #ffffff !important; }
+        body.high-contrast .text-indigo-600 { color: #818cf8 !important; }
+        body.high-contrast .memory-card-front { background-color: #333 !important; border-color: #fff !important; color: #fff !important; }
+        body.high-contrast .memory-card-back { background-color: #000 !important; border-color: #fff !important; }
+        body.high-contrast .bg-indigo-50 { background-color: #333 !important; border-color: #fff !important; color: #fff !important; }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        
+        #confetti-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; }
+        
+        #settings-modal { backdrop-filter: blur(5px); }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 flex flex-col">
+
+    <canvas id="confetti-canvas"></canvas>
+
+    <header class="bg-white shadow-md py-4 px-4 sm:px-6 rounded-b-3xl relative z-10 sticky top-0">
+        <div class="max-w-5xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-2 sm:gap-3 cursor-pointer" onclick="goToLevelSelect()" title="Zmień poziom">
+                <div class="bg-indigo-500 p-2 sm:p-3 rounded-2xl text-white shadow-lg">
+                    <i class="fa-solid fa-graduation-cap text-lg sm:text-2xl"></i>
+                </div>
+                <h1 class="text-lg sm:text-2xl font-black text-indigo-600 tracking-wide leading-tight flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                    English Play Area
+                    <span id="header-level-badge" class="hidden text-[10px] sm:text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 sm:py-1 rounded-full font-bold"></span>
+                </h1>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <div id="stars-display" class="flex text-lg sm:text-2xl font-bold text-yellow-500 bg-yellow-50 px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl border-2 border-yellow-200 shadow-sm items-center gap-2">
+                    <i class="fa-solid fa-star animate-pulse"></i> <span id="star-count">0</span>
+                </div>
+                <!-- SPE Settings Button -->
+                <button onclick="toggleSettingsModal()" class="bg-slate-100 hover:bg-slate-200 p-2 sm:p-3 rounded-2xl text-slate-600 shadow-sm transition-colors border border-slate-200">
+                    <i class="fa-solid fa-universal-access text-lg sm:text-xl"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- SPE Settings Modal -->
+    <div id="settings-modal" class="hidden fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-[2rem] p-6 sm:p-8 max-w-md w-full shadow-2xl relative">
+            <button onclick="toggleSettingsModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-2xl w-10 h-10 flex items-center justify-center rounded-full bg-slate-100"><i class="fa-solid fa-times"></i></button>
+            
+            <h2 class="text-2xl font-black text-indigo-600 mb-2"><i class="fa-solid fa-universal-access mr-2"></i> Opcje SPE</h2>
+            <p class="text-sm text-slate-500 mb-6 font-bold">Dostosuj aplikację do potrzeb ucznia (UDL)</p>
+            
+            <div class="space-y-4">
+                <!-- Reduce Motion -->
+                <label class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl"><i class="fa-solid fa-pause"></i></div>
+                        <div>
+                            <div class="font-bold text-slate-700">Wyłącz animacje</div>
+                            <div class="text-xs text-slate-500">Redukuje przebodźcowanie</div>
+                        </div>
+                    </div>
+                    <input type="checkbox" id="setting-reduce-motion" onchange="updateSettings()" class="w-6 h-6 rounded text-indigo-600 focus:ring-indigo-500">
+                </label>
+
+                <!-- High Contrast -->
+                <label class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xl"><i class="fa-solid fa-circle-half-stroke"></i></div>
+                        <div>
+                            <div class="font-bold text-slate-700">Wysoki kontrast</div>
+                            <div class="text-xs text-slate-500">Dla dzieci niedowidzących</div>
+                        </div>
+                    </div>
+                    <input type="checkbox" id="setting-high-contrast" onchange="updateSettings()" class="w-6 h-6 rounded text-indigo-600 focus:ring-indigo-500">
+                </label>
+
+                <!-- Hide Scores -->
+                <label class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-xl"><i class="fa-solid fa-eye-slash"></i></div>
+                        <div>
+                            <div class="font-bold text-slate-700">Tryb bez presji</div>
+                            <div class="text-xs text-slate-500">Ukrywa punkty, redukuje lęk</div>
+                        </div>
+                    </div>
+                    <input type="checkbox" id="setting-hide-scores" onchange="updateSettings()" class="w-6 h-6 rounded text-indigo-600 focus:ring-indigo-500">
+                </label>
+
+                <!-- Mute System Sounds -->
+                <label class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xl"><i class="fa-solid fa-volume-xmark"></i></div>
+                        <div>
+                            <div class="font-bold text-slate-700">Wycisz dźwięki gry</div>
+                            <div class="text-xs text-slate-500">Zostawia tylko głos lektora</div>
+                        </div>
+                    </div>
+                    <input type="checkbox" id="setting-mute-sounds" onchange="updateSettings()" class="w-6 h-6 rounded text-indigo-600 focus:ring-indigo-500">
+                </label>
+            </div>
+            
+            <button onclick="toggleSettingsModal()" class="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-2xl transition-colors">
+                Zapisz i zamknij
+            </button>
+        </div>
+    </div>
+
+    <main id="app-container" class="flex-grow flex flex-col p-4 sm:p-6 max-w-6xl mx-auto w-full relative z-0">
+        <!-- Zawartość wstrzykiwana przez JS -->
+    </main>
+
+    <script>
+        // Baza słownictwa
+        const vocabulary = {
+            emotions: {
+                title: "Feelings", icon: "fa-face-smile", color: "bg-pink-500", minLevel: 0,
+                words: [
+                    { en: "happy", emoji: "😃", minLevel: 0 }, { en: "angry", emoji: "😠", minLevel: 0 },
+                    { en: "scared", emoji: "😨", minLevel: 0 }, { en: "sleepy", emoji: "😴", minLevel: 0 },
+                    { en: "hungry", emoji: "🤤", minLevel: 0 }, { en: "sad", emoji: "😢", minLevel: 0 },
+                    { en: "thirsty", emoji: "🥵", minLevel: 1 },
+                    { en: "calm", emoji: "😌", minLevel: 3 }, { en: "worried", emoji: "😟", minLevel: 3 },
+                    { en: "frightened", emoji: "😱", minLevel: 3 }, { en: "surprised", emoji: "😲", minLevel: 3 }
+                ]
+            },
+            weather: {
+                title: "Weather", icon: "fa-sun", color: "bg-sky-400", minLevel: 0,
+                words: [
+                    { en: "It's sunny", emoji: "☀️", minLevel: 0 }, { en: "It's cloudy", emoji: "☁️", minLevel: 0 },
+                    { en: "It's rainy", emoji: "🌧️", minLevel: 0 }, { en: "It's snowy", emoji: "❄️", minLevel: 0 },
+                    { en: "It's windy", emoji: "🌬️", minLevel: 3 }
+                ]
+            },
+            colours: {
+                title: "Colours", icon: "fa-palette", color: "bg-red-400", minLevel: 0,
+                words: [
+                    { en: "red", emoji: "🔴", minLevel: 0 }, { en: "yellow", emoji: "🟡", minLevel: 0 },
+                    { en: "green", emoji: "🟢", minLevel: 0 }, { en: "blue", emoji: "🔵", minLevel: 0 },
+                    { en: "pink", emoji: "🩷", minLevel: 0 }, { en: "orange", emoji: "🟠", minLevel: 0 },
+                    { en: "purple", emoji: "🟣", minLevel: 0 }, { en: "brown", emoji: "🟤", minLevel: 0 },
+                    { en: "black", emoji: "⚫", minLevel: 0 }, { en: "white", emoji: "⚪", minLevel: 0 },
+                    { en: "grey", emoji: "🩶", minLevel: 0 }, { en: "rainbow", emoji: "🌈", minLevel: 1 }
+                ]
+            },
+            toys: {
+                title: "Toys", icon: "fa-gamepad", color: "bg-indigo-400", minLevel: 0,
+                words: [
+                    { en: "teddy", emoji: "🧸", minLevel: 0 }, { en: "doll", emoji: "🪆", minLevel: 0 },
+                    { en: "ball", emoji: "⚽", minLevel: 0 }, { en: "car", emoji: "🚗", minLevel: 0 },
+                    { en: "train", emoji: "🚂", minLevel: 0 }, { en: "jigsaw puzzle", emoji: "🧩", minLevel: 1 },
+                    { en: "blocks", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><rect x="20" y="40" width="60" height="40" fill="#ef4444" rx="4"/><rect x="20" y="75" width="60" height="5" fill="#b91c1c" rx="2"/><path d="M25 40 L25 30 Q25 25 32 25 L38 25 Q45 25 45 30 L45 40 Z" fill="#ef4444"/><path d="M55 40 L55 30 Q55 25 62 25 L68 25 Q75 25 75 30 L75 40 Z" fill="#ef4444"/><path d="M25 30 Q25 25 32 25 L38 25 Q45 25 45 30" fill="none" stroke="#fca5a5" stroke-width="2"/><path d="M55 30 Q55 25 62 25 L68 25 Q75 25 75 30" fill="none" stroke="#fca5a5" stroke-width="2"/></svg>', minLevel: 1 }, 
+                    { en: "book", emoji: "📖", minLevel: 1 },
+                    { en: "rocket", emoji: "🚀", minLevel: 2 }, { en: "robot", emoji: "🤖", minLevel: 2 }
+                ]
+            },
+            adjectives: {
+                title: "Opposites", icon: "fa-arrows-left-right", color: "bg-teal-500", minLevel: 0,
+                words: [
+                    { en: "big", emoji: "🐘", minLevel: 0 }, { en: "small", emoji: "🐁", minLevel: 0 },
+                    { en: "fast", emoji: "🐆", minLevel: 0 }, { en: "slow", emoji: "🐢", minLevel: 0 },
+                    { en: "loud", emoji: "🔊", minLevel: 0 }, { en: "quiet", emoji: "🤫", minLevel: 0 }
+                ]
+            },
+            face: {
+                title: "Face", icon: "fa-eye", color: "bg-rose-400", minLevel: 0,
+                words: [
+                    { en: "eyes", emoji: "👀", minLevel: 0 }, { en: "nose", emoji: "👃", minLevel: 0 },
+                    { en: "ears", emoji: "👂", minLevel: 0 }, { en: "mouth", emoji: "👄", minLevel: 0 }
+                ]
+            },
+            body: {
+                title: "Body", icon: "fa-child", color: "bg-cyan-500", minLevel: 0,
+                words: [
+                    { en: "head", emoji: "🗣️", minLevel: 0 }, { en: "shoulders", emoji: "🤷", minLevel: 0 },
+                    { en: "knees", emoji: "🧎", minLevel: 0 }, { en: "toes", emoji: "🦶", minLevel: 0 },
+                    { en: "arms", emoji: "💪", minLevel: 2 }, { en: "legs", emoji: "🦵", minLevel: 2 }, 
+                    { en: "tummy", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><path d="M30 20 C20 50, 20 80, 30 90 L70 90 C80 80, 80 50, 70 20 Z" fill="#fcd34d" stroke="#f59e0b" stroke-width="4" stroke-linejoin="round"/><circle cx="50" cy="65" r="3" fill="#d97706"/><path d="M47 62 Q50 60 53 62" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round"/><path d="M25 35 Q50 45 75 35 L70 20 L30 20 Z" fill="#3b82f6"/></svg>', minLevel: 2 },
+                    { en: "hair", emoji: "💇", minLevel: 3 },
+                    { en: "tall", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><rect x="40" y="10" width="20" height="80" fill="#3b82f6" rx="5"/><path d="M75 25 L85 15 L95 25 M85 15 L85 85 M75 75 L85 85 L95 75" fill="none" stroke="#64748b" stroke-width="4" stroke-linecap="round"/></svg>', minLevel: 3 },
+                    { en: "short", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><rect x="40" y="50" width="20" height="40" fill="#ef4444" rx="5"/><path d="M75 60 L85 50 L95 60 M85 50 L85 90 M75 80 L85 90 L95 80" fill="none" stroke="#64748b" stroke-width="4" stroke-linecap="round"/></svg>', minLevel: 3 },
+                    { en: "long hair", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><path d="M48 10 C 20 10, 15 40, 20 60 C 25 80, 15 95, 25 95 C 35 95, 35 80, 30 60 C 25 40, 35 25, 48 20 Z" fill="#8B4513" stroke="#3e1f05" stroke-width="3" stroke-linejoin="round"/><path d="M52 10 C 80 10, 85 40, 80 60 C 75 80, 85 95, 75 95 C 65 95, 65 80, 70 60 C 75 40, 65 25, 52 20 Z" fill="#8B4513" stroke="#3e1f05" stroke-width="3" stroke-linejoin="round"/><path d="M26 30 Q 30 50 25 80 M74 30 Q 70 50 75 80" fill="none" stroke="#3e1f05" stroke-width="2"/></svg>', minLevel: 3 },
+                    { en: "short hair", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><path d="M25 40 Q50 10 75 40" stroke="#d97706" stroke-width="12" fill="none" stroke-linecap="round"/><circle cx="50" cy="50" r="25" fill="#fde047"/><circle cx="40" cy="45" r="3" fill="#000"/><circle cx="60" cy="45" r="3" fill="#000"/><path d="M45 60 Q50 65 55 60" stroke="#000" stroke-width="2" fill="none"/></svg>', minLevel: 3 }
+                ]
+            },
+            family: {
+                title: "Family", icon: "fa-users", color: "bg-fuchsia-500", minLevel: 0,
+                words: [
+                    { en: "mummy", emoji: "👩", minLevel: 0 }, { en: "daddy", emoji: "👨", minLevel: 0 },
+                    { en: "brother", emoji: "👦", minLevel: 0 }, { en: "sister", emoji: "👧", minLevel: 0 },
+                    { en: "baby", emoji: "👶", minLevel: 0 },
+                    { en: "granny", emoji: "👵", minLevel: 2 }, { en: "grandpa", emoji: "👴", minLevel: 2 },
+                    { en: "children", emoji: "👧👦", minLevel: 3 }, { en: "boy", emoji: "👦", minLevel: 3 },
+                    { en: "girl", emoji: "👧", minLevel: 3 }
+                ]
+            },
+            animals: {
+                title: "Animals", icon: "fa-paw", color: "bg-amber-600", minLevel: 0,
+                words: [
+                    { en: "cat", emoji: "🐈", minLevel: 0 }, { en: "dog", emoji: "🐕", minLevel: 0 },
+                    { en: "bird", emoji: "🐦", minLevel: 0 }, { en: "snake", emoji: "🐍", minLevel: 0 },
+                    { en: "rabbit", emoji: "🐇", minLevel: 0 }, { en: "fish", emoji: "🐟", minLevel: 0 },
+                    { en: "frog", emoji: "🐸", minLevel: 0 }, { en: "bear", emoji: "🐻", minLevel: 0 },
+                    { en: "monkey", emoji: "🐒", minLevel: 0 }, { en: "crocodile", emoji: "🐊", minLevel: 0 },
+                    { en: "hamster", emoji: "🐹", minLevel: 1 }, { en: "turtle", emoji: "🐢", minLevel: 1 },
+                    { en: "mouse", emoji: "🐭", minLevel: 2 }, { en: "lion", emoji: "🦁", minLevel: 2 },
+                    { en: "tiger", emoji: "🐅", minLevel: 2 }, { en: "giraffe", emoji: "🦒", minLevel: 2 },
+                    { en: "elephant", emoji: "🐘", minLevel: 2 }, { en: "zebra", emoji: "🦓", minLevel: 2 },
+                    { en: "parrot", emoji: "🦜", minLevel: 2 }
+                ]
+            },
+            fruit: {
+                title: "Fruit", icon: "fa-apple-whole", color: "bg-red-500", minLevel: 0,
+                words: [
+                    { en: "apple", emoji: "🍎", minLevel: 0 }, { en: "banana", emoji: "🍌", minLevel: 0 },
+                    { en: "orange", emoji: "🍊", minLevel: 0 }, { en: "watermelon", emoji: "🍉", minLevel: 0 },
+                    { en: "strawberry", emoji: "🍓", minLevel: 0 }, { en: "pear", emoji: "🍐", minLevel: 0 },
+                    { en: "grapes", emoji: "🍇", minLevel: 1 }, { en: "cherry", emoji: "🍒", minLevel: 1 },
+                    { en: "plum", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><circle cx="50" cy="55" r="35" fill="#7e22ce"/><path d="M50 20 Q55 10 65 15 Q75 20 70 30 Z" fill="#22c55e"/><path d="M50 55 Q40 30 50 20" stroke="#4c1d95" stroke-width="3" fill="none"/></svg>', minLevel: 1 }
+                ]
+            },
+            food: {
+                title: "Food", icon: "fa-burger", color: "bg-orange-400", minLevel: 0,
+                words: [
+                    { en: "spaghetti", emoji: "🍝", minLevel: 0 }, { en: "french fries", emoji: "🍟", minLevel: 0 },
+                    { en: "ice cream", emoji: "🍦", minLevel: 0 }, { en: "cookie", emoji: "🍪", minLevel: 0 },
+                    { en: "chocolate cake", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><ellipse cx="50" cy="75" rx="40" ry="15" fill="#451a03"/><rect x="10" y="45" width="80" height="30" fill="#451a03"/><ellipse cx="50" cy="45" rx="40" ry="15" fill="#78350f"/><path d="M10 45 Q15 65 25 45 Q35 60 45 45 Q55 70 65 45 Q75 55 85 45 Q90 45 90 45" fill="#381302"/><ellipse cx="50" cy="45" rx="40" ry="15" fill="#381302"/><circle cx="50" cy="30" r="8" fill="#ef4444"/></svg>', minLevel: 1 }, 
+                    { en: "sausage", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><path d="M20 60 Q50 20 80 60" fill="none" stroke="#9a3412" stroke-width="24" stroke-linecap="round"/><path d="M20 60 Q50 20 80 60" fill="none" stroke="#ea580c" stroke-width="20" stroke-linecap="round"/><path d="M25 55 Q50 25 75 55" fill="none" stroke="#fdba74" stroke-width="4" stroke-linecap="round"/><line x1="8" y1="70" x2="16" y2="65" stroke="#9a3412" stroke-width="4" stroke-linecap="round"/><line x1="92" y1="70" x2="84" y2="65" stroke="#9a3412" stroke-width="4" stroke-linecap="round"/></svg>', minLevel: 1 },
+                    { en: "cheese", emoji: "🧀", minLevel: 1 },
+                    { en: "broccoli", emoji: "🥦", minLevel: 2 }, { en: "soup", emoji: "🍲", minLevel: 2 },
+                    { en: "doughnut", emoji: "🍩", minLevel: 2 }, { en: "popcorn", emoji: "🍿", minLevel: 2 },
+                    { en: "pizza", emoji: "🍕", minLevel: 2 }, { en: "juice", emoji: "🧃", minLevel: 2 },
+                    { en: "sandwich", emoji: "🥪", minLevel: 3 }, { en: "chicken", emoji: "🍗", minLevel: 3 },
+                    { en: "fish", emoji: "🐟", minLevel: 3 }
+                ]
+            },
+            bugs: {
+                title: "Bugs", icon: "fa-bug", color: "bg-emerald-500", minLevel: 0,
+                words: [
+                    { en: "spider", emoji: "🕷️", minLevel: 0 }, { en: "ladybird", emoji: "🐞", minLevel: 0 },
+                    { en: "bee", emoji: "🐝", minLevel: 0 }, { en: "butterfly", emoji: "🦋", minLevel: 0 },
+                    { en: "caterpillar", emoji: "🐛", minLevel: 1 }, { en: "ant", emoji: "🐜", minLevel: 1 }
+                ]
+            },
+            farm: {
+                title: "Farm", icon: "fa-tractor", color: "bg-green-500", minLevel: 0,
+                words: [
+                    { en: "pig", emoji: "🐷", minLevel: 0 }, { en: "cow", emoji: "🐮", minLevel: 0 },
+                    { en: "horse", emoji: "🐴", minLevel: 0 }, { en: "duck", emoji: "🦆", minLevel: 0 },
+                    { en: "rooster", emoji: "🐓", minLevel: 0 }, { en: "sheep", emoji: "🐑", minLevel: 0 },
+                    { en: "goat", emoji: "🐐", minLevel: 1 }, { en: "chicken", emoji: "🐔", minLevel: 1 },
+                    { en: "calf", emoji: "🐄", minLevel: 3 }, { en: "duckling", emoji: "🐥", minLevel: 3 },
+                    { en: "chick", emoji: "🐣", minLevel: 3 }, { en: "lamb", emoji: "🐏", minLevel: 3 }
+                ]
+            },
+            birthday: {
+                title: "Birthday", icon: "fa-cake-candles", color: "bg-pink-400", minLevel: 1,
+                words: [
+                    { en: "cake", emoji: "🎂", minLevel: 1 }, { en: "balloon", emoji: "🎈", minLevel: 1 },
+                    { en: "present", emoji: "🎁", minLevel: 1 }, { en: "party hat", emoji: "🥳", minLevel: 1 },
+                    { en: "friends", emoji: "🧑‍🤝‍🧑", minLevel: 1 }
+                ]
+            },
+            shapes: {
+                title: "Shapes", icon: "fa-shapes", color: "bg-violet-500", minLevel: 1,
+                words: [
+                    { en: "circle", emoji: "🔴", minLevel: 1 }, { en: "triangle", emoji: "🔺", minLevel: 1 },
+                    { en: "square", emoji: "🟦", minLevel: 1 },
+                    { en: "oval", emoji: "🥚", minLevel: 3 },
+                    { en: "rectangle", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><rect x="10" y="30" width="80" height="40" fill="#3b82f6" rx="5"/></svg>', minLevel: 3 }
+                ]
+            },
+            school: {
+                title: "School", icon: "fa-school", color: "bg-yellow-500", minLevel: 2,
+                words: [
+                    { en: "book", emoji: "📖", minLevel: 2 }, { en: "crayons", emoji: "🖍️", minLevel: 2 },
+                    { en: "pencil", emoji: "✏️", minLevel: 2 }, { en: "paints", emoji: "🎨", minLevel: 2 },
+                    { en: "rubber", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><rect x="20" y="30" width="60" height="40" rx="10" fill="#fbcfe8"/><rect x="20" y="30" width="20" height="40" fill="#93c5fd" rx="10" style="border-right: 2px solid #000"/></svg>', minLevel: 2 },
+                    { en: "pencil case", emoji: "👝", minLevel: 3 }, { en: "bag", emoji: "🎒", minLevel: 3 },
+                    { en: "pen", emoji: "🖊️", minLevel: 3 },
+                    { en: "table", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><rect x="10" y="35" width="80" height="10" fill="#b45309" rx="3"/><rect x="15" y="45" width="10" height="40" fill="#92400e"/><rect x="75" y="45" width="10" height="40" fill="#92400e"/></svg>', minLevel: 3 },
+                    { en: "chair", emoji: "🪑", minLevel: 3 }, { en: "peg", emoji: "🪝", minLevel: 3 },
+                    { en: "school", emoji: "🏫", minLevel: 3 }, { en: "teacher", emoji: "👩‍🏫", minLevel: 3 }
+                ]
+            },
+            nature: {
+                title: "Nature", icon: "fa-leaf", color: "bg-lime-600", minLevel: 2,
+                words: [
+                    { en: "mud", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><path d="M50 20 Q70 10 80 30 Q100 40 85 60 Q95 80 70 85 Q50 100 30 85 Q10 80 15 60 Q0 40 20 30 Q30 10 50 20 Z" fill="#78350f"/><circle cx="25" cy="25" r="5" fill="#78350f"/><circle cx="80" cy="75" r="6" fill="#78350f"/><circle cx="75" cy="20" r="4" fill="#78350f"/></svg>', minLevel: 2 },
+                    { en: "river", emoji: "🏞️", minLevel: 2 }, { en: "snowstorm", emoji: "🌨️", minLevel: 2 },
+                    { en: "forest", emoji: "🌲", minLevel: 2 }, 
+                    { en: "cave", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><path d="M10 90 L30 30 Q50 10 70 30 L90 90 Z" fill="#64748b"/><path d="M25 90 L40 50 Q50 40 60 50 L75 90 Z" fill="#0f172a"/><path d="M20 90 L30 70 L40 90 Z" fill="#475569"/><path d="M70 90 L80 60 L90 90 Z" fill="#475569"/></svg>', minLevel: 2 },
+                    { en: "bear", emoji: "🐻", minLevel: 2 },
+                    { en: "nest", emoji: "🪹", minLevel: 3 }, { en: "chick", emoji: "🐤", minLevel: 3 },
+                    { en: "leaf", emoji: "🍃", minLevel: 3 },
+                    { en: "sky", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><rect x="10" y="10" width="80" height="80" rx="15" fill="#38bdf8"/><circle cx="70" cy="30" r="15" fill="#fef08a"/><path d="M20 70 Q30 50 45 70 Q60 60 80 70 Z" fill="#fff"/></svg>', minLevel: 3 },
+                    { en: "grass", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><path d="M10 90 L15 40 L20 90 L25 30 L30 90 L35 50 L40 90 L45 20 L50 90 L60 30 L65 90 L75 40 L85 90 L90 50 L95 90 Z" fill="#166534"/><path d="M15 90 L22 45 L28 90 L35 35 L42 90 L48 25 L55 90 L62 45 L68 90 L78 35 L82 90 L88 55 L92 90 Z" fill="#22c55e"/><path d="M20 90 L25 50 L32 90 L38 40 L45 90 L52 30 L58 90 L65 50 L72 90 L80 40 L85 90 Z" fill="#4ade80"/><ellipse cx="50" cy="90" rx="45" ry="5" fill="#15803d"/></svg>', minLevel: 3 },
+                    { en: "flower", emoji: "🌻", minLevel: 3 },
+                    { en: "seed", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><ellipse cx="50" cy="55" rx="20" ry="35" fill="#ca8a04"/><path d="M40 35 Q50 20 60 35" stroke="#854d0e" stroke-width="3" fill="none"/></svg>', minLevel: 3 }
+                ]
+            },
+            clothes: {
+                title: "Clothes", icon: "fa-shirt", color: "bg-indigo-400", minLevel: 2,
+                words: [
+                    { en: "coat", emoji: "🧥", minLevel: 2 },
+                    { en: "hat", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><path d="M20 60 C 20 20, 80 20, 80 60 Z" fill="#ec4899"/><rect x="15" y="60" width="70" height="20" rx="10" fill="#db2777"/><circle cx="50" cy="20" r="12" fill="#fbcfe8"/></svg>', minLevel: 2 },
+                    { en: "scarf", emoji: "🧣", minLevel: 2 }, { en: "gloves", emoji: "🧤", minLevel: 2 },
+                    { en: "boots", emoji: "👢", minLevel: 2 }, { en: "shoes", emoji: "👞", minLevel: 2 },
+                    { en: "t-shirt", emoji: "👕", minLevel: 2 },
+                    { en: "jumper", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><path d="M35 25 L65 25 L90 50 L80 60 L65 45 L65 85 L35 85 L35 45 L20 60 L10 50 Z" fill="#14b8a6" stroke="#0f766e" stroke-width="4" stroke-linejoin="round"/></svg>', minLevel: 2 },
+                    { en: "socks", emoji: "🧦", minLevel: 2 }, { en: "trousers", emoji: "👖", minLevel: 2 },
+                    { en: "cap", emoji: "🧢", minLevel: 3 }, { en: "dress", emoji: "👗", minLevel: 3 },
+                    { en: "skirt", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><path d="M35 20 L65 20 L85 80 L15 80 Z" fill="#e879f9" stroke="#c026d3" stroke-width="4" stroke-linejoin="round"/></svg>', minLevel: 3 },
+                    { en: "shorts", emoji: "🩳", minLevel: 3 }, { en: "sandals", emoji: "👡", minLevel: 3 }
+                ]
+            },
+            routines: {
+                title: "Routine", icon: "fa-clock", color: "bg-blue-600", minLevel: 2,
+                words: [
+                    { en: "I wake up", emoji: "🥱", minLevel: 2 }, { en: "I wash my face", emoji: "🧼", minLevel: 2 },
+                    { en: "I brush my teeth", emoji: "🪥", minLevel: 2 }, { en: "I comb my hair", emoji: "🪮", minLevel: 2 },
+                    { en: "I eat breakfast", emoji: "🥣", minLevel: 2 }, { en: "I go to school", emoji: "🎒", minLevel: 2 }
+                ]
+            },
+            actions: {
+                title: "Actions", icon: "fa-person-running", color: "bg-orange-500", minLevel: 3,
+                words: [
+                    { en: "play", emoji: "🎮", minLevel: 3 }, { en: "run", emoji: "🏃", minLevel: 3 },
+                    { en: "jump", emoji: "🦘", minLevel: 3 }, { en: "shake", emoji: "🫨", minLevel: 3 },
+                    { en: "hide", emoji: "🫣", minLevel: 3 }, { en: "cry", emoji: "😭", minLevel: 3 },
+                    { en: "laugh", emoji: "😂", minLevel: 3 }, { en: "sing", emoji: "🎤", minLevel: 3 }
+                ]
+            },
+            seaAnimals: {
+                title: "Sea Animals", icon: "fa-fish", color: "bg-blue-500", minLevel: 3,
+                words: [
+                    { en: "fish", emoji: "🐟", minLevel: 3 }, { en: "turtle", emoji: "🐢", minLevel: 3 },
+                    { en: "starfish", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><path d="M50 10 L60 40 L90 40 L65 60 L75 90 L50 70 L25 90 L35 60 L10 40 L40 40 Z" fill="#f97316" stroke="#c2410c" stroke-width="4"/><circle cx="50" cy="50" r="2" fill="#fff"/></svg>', minLevel: 3 },
+                    { en: "octopus", emoji: "🐙", minLevel: 3 }, { en: "shark", emoji: "🦈", minLevel: 3 },
+                    { en: "whale", emoji: "🐳", minLevel: 3 }, { en: "jellyfish", emoji: "🪼", minLevel: 3 }
+                ]
+            },
+            vegetables: {
+                title: "Vegetables", icon: "fa-carrot", color: "bg-green-600", minLevel: 3,
+                words: [
+                    { en: "potato", emoji: "🥔", minLevel: 3 }, { en: "tomato", emoji: "🍅", minLevel: 3 },
+                    { en: "green beans", emoji: "🫛", minLevel: 3 }, { en: "carrot", emoji: "🥕", minLevel: 3 },
+                    { en: "cucumber", emoji: "🥒", minLevel: 3 },
+                    { en: "pumpkin", emoji: '<svg viewBox="0 0 100 100" style="width:1em;height:1em;"><ellipse cx="50" cy="60" rx="40" ry="30" fill="#f97316"/><ellipse cx="35" cy="60" rx="15" ry="30" fill="#ea580c"/><ellipse cx="65" cy="60" rx="15" ry="30" fill="#ea580c"/><ellipse cx="50" cy="60" rx="15" ry="30" fill="#fb923c"/><path d="M50 30 Q45 15 55 10" stroke="#166534" stroke-width="6" fill="none" stroke-linecap="round"/></svg>', minLevel: 3 }
+                ]
+            },
+            vehicles: {
+                title: "Vehicles", icon: "fa-car", color: "bg-slate-500", minLevel: 3,
+                words: [
+                    { en: "car", emoji: "🚗", minLevel: 3 }, { en: "lorry", emoji: "🚛", minLevel: 3 },
+                    { en: "bus", emoji: "🚌", minLevel: 3 }, { en: "plane", emoji: "✈️", minLevel: 3 },
+                    { en: "train", emoji: "🚂", minLevel: 3 }, { en: "bike", emoji: "🚲", minLevel: 3 },
+                    { en: "scooter", emoji: "🛴", minLevel: 3 }, { en: "boat", emoji: "⛵", minLevel: 3 },
+                    { en: "tractor", emoji: "🚜", minLevel: 3 }, { en: "motorbike", emoji: "🏍️", minLevel: 3 },
+                    { en: "fast", emoji: "🐆", minLevel: 3 }, { en: "slow", emoji: "🐢", minLevel: 3 }
+                ]
+            }
+        };
+
+        // --- STAN APLIKACJI I USTAWIENIA UDL/SPE ---
+        let currentState = {
+            view: 'levelSelect', 
+            currentLevel: null,
+            mode: null,
+            category: null,
+            gameType: null,
+            playWords: [],
+            currentWordIndex: 0,
+            options: [],
+            score: 0,
+            totalStars: parseInt(localStorage.getItem('epa_stars')) || 0,
+            completedCategories: JSON.parse(localStorage.getItem('epa_completed')) || [],
+            memoryCards: [],
+            memoryFlipped: [],
+            memoryMatches: 0,
+            isCheckingMemory: false,
+            sortItems: [],
+            sortIndex: 0,
+            sortCats: [],
+            settings: JSON.parse(localStorage.getItem('epa_settings')) || {
+                reduceMotion: false,
+                highContrast: false,
+                hideScores: false,
+                muteSystemSounds: false
+            }
+        };
+
+        const appContainer = document.getElementById('app-container');
+        const starCountEl = document.getElementById('star-count');
+        const headerLevelBadge = document.getElementById('header-level-badge');
+        let currentAudio = null;
+
+        // --- USTAWIENIA SPE (Logika) ---
+        function toggleSettingsModal() {
+            const modal = document.getElementById('settings-modal');
+            if (modal.classList.contains('hidden')) {
+                // Załaduj aktualne stany do checkboxów
+                document.getElementById('setting-reduce-motion').checked = currentState.settings.reduceMotion;
+                document.getElementById('setting-high-contrast').checked = currentState.settings.highContrast;
+                document.getElementById('setting-hide-scores').checked = currentState.settings.hideScores;
+                document.getElementById('setting-mute-sounds').checked = currentState.settings.muteSystemSounds;
+                modal.classList.remove('hidden');
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function updateSettings() {
+            currentState.settings = {
+                reduceMotion: document.getElementById('setting-reduce-motion').checked,
+                highContrast: document.getElementById('setting-high-contrast').checked,
+                hideScores: document.getElementById('setting-hide-scores').checked,
+                muteSystemSounds: document.getElementById('setting-mute-sounds').checked
+            };
+            localStorage.setItem('epa_settings', JSON.stringify(currentState.settings));
+            applySettingsToUI();
+        }
+
+        function applySettingsToUI() {
+            const body = document.body;
+            const starsDisplay = document.getElementById('stars-display');
+            
+            // Motion
+            if (currentState.settings.reduceMotion) body.classList.add('reduce-motion');
+            else body.classList.remove('reduce-motion');
+            
+            // Contrast
+            if (currentState.settings.highContrast) body.classList.add('high-contrast');
+            else body.classList.remove('high-contrast');
+            
+            // Scores
+            if (currentState.settings.hideScores) starsDisplay.style.display = 'none';
+            else starsDisplay.style.display = 'flex';
+        }
+
+        // --- DŹWIĘKI I GŁOS ---
+        function playHighQualityVoice(text, onComplete = null) {
+            if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+
+            const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&tl=en-GB&client=tw-ob&q=${encodeURIComponent(text)}`;
+            currentAudio = new Audio(url);
+            currentAudio.onended = () => { if (onComplete) onComplete(); };
+            currentAudio.onerror = () => { fallbackToSystemVoice(text, onComplete); };
+            currentAudio.play().catch(e => { fallbackToSystemVoice(text, onComplete); });
+        }
+
+        function fallbackToSystemVoice(text, onComplete) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-GB'; 
+                utterance.rate = 0.9; 
+                utterance.pitch = 1.1;
+                
+                const voices = window.speechSynthesis.getVoices();
+                const bestVoice = voices.find(v => v.lang === 'en-GB' && (v.name.includes('Google') || v.name.includes('Natural'))) || voices.find(v => v.lang === 'en-GB');
+                if (bestVoice) utterance.voice = bestVoice;
+                
+                utterance.onend = () => { if(onComplete) onComplete(); };
+                window.speechSynthesis.speak(utterance);
+            } else { if (onComplete) onComplete(); }
+        }
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSoundEffect(type) {
+            if(currentState.settings.muteSystemSounds) return; // SPE: Wyłącza piski, pikanie i dźwięki błędu
+            if(currentState.settings.reduceMotion && type === 'pop') return; // Mniej dźwięków interfejsu w trybie spokojnym
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            if (type === 'correct') {
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(1500, audioCtx.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                oscillator.start(); oscillator.stop(audioCtx.currentTime + 0.4);
+            } else if (type === 'wrong') {
+                oscillator.type = 'triangle';
+                oscillator.frequency.setValueAtTime(200, audioCtx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.2);
+                gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                oscillator.start(); oscillator.stop(audioCtx.currentTime + 0.3);
+            } else if (type === 'pop') {
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.05);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                oscillator.start(); oscillator.stop(audioCtx.currentTime + 0.1);
+            }
+        }
+
+        function saveProgress() {
+            localStorage.setItem('epa_stars', currentState.totalStars);
+            localStorage.setItem('epa_completed', JSON.stringify(currentState.completedCategories));
+        }
+
+        function getWordsForCurrentLevel(catKey) {
+            return vocabulary[catKey].words.filter(w => w.minLevel <= currentState.currentLevel);
+        }
+
+        function render() {
+            appContainer.innerHTML = '';
+            starCountEl.innerText = currentState.totalStars;
+            
+            if (currentState.currentLevel !== null) {
+                headerLevelBadge.innerText = currentState.currentLevel === 0 ? "Starter" : "Lvl " + currentState.currentLevel;
+                headerLevelBadge.classList.remove('hidden');
+            } else {
+                headerLevelBadge.classList.add('hidden');
+            }
+
+            if (currentState.view === 'levelSelect') {
+                appContainer.innerHTML = `
+                    <div class="text-center mt-6 sm:mt-10 animate-float flex-grow flex flex-col justify-center">
+                        <h2 class="text-4xl md:text-5xl font-black text-slate-800 mb-4">Wybierz grupę!</h2>
+                        <p class="text-lg text-slate-500 font-bold mb-8">Dopasujemy gry do Twojego wieku:</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl mx-auto w-full px-4">
+                            <button onclick="selectLevel(0)" class="bg-green-400 hover:bg-green-500 card text-white text-2xl font-bold py-6 px-6 rounded-3xl shadow-[0_6px_0_rgb(74,222,128)] transition-all">
+                                👶 Starter (3-latki)
+                            </button>
+                            <button onclick="selectLevel(1)" class="bg-blue-400 hover:bg-blue-500 card text-white text-2xl font-bold py-6 px-6 rounded-3xl shadow-[0_6px_0_rgb(96,165,250)] transition-all">
+                                🎈 Poziom 1 (4-latki)
+                            </button>
+                            <button onclick="selectLevel(2)" class="bg-orange-400 hover:bg-orange-500 card text-white text-2xl font-bold py-6 px-6 rounded-3xl shadow-[0_6px_0_rgb(251,146,60)] transition-all">
+                                🚀 Poziom 2 (5-latki)
+                            </button>
+                            <button onclick="selectLevel(3)" class="bg-purple-400 hover:bg-purple-500 card text-white text-2xl font-bold py-6 px-6 rounded-3xl shadow-[0_6px_0_rgb(192,132,252)] transition-all">
+                                🎓 Poziom 3 (5-6 lat)
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+            else if (currentState.view === 'home') {
+                appContainer.innerHTML = `
+                    <div class="text-center mt-6 sm:mt-10 animate-float flex-grow flex flex-col justify-center">
+                        <h2 class="text-4xl md:text-6xl font-black text-slate-800 mb-4 leading-tight">
+                            Time to <span class="text-indigo-500">Play!</span>
+                        </h2>
+                        <p class="text-lg sm:text-xl text-slate-600 mb-8 sm:mb-12 font-bold">Wybierz, co robimy:</p>
+                        <div class="flex flex-col sm:flex-row gap-4 sm:gap-8 justify-center items-center w-full max-w-2xl mx-auto">
+                            <button onclick="goToCategorySelect('learn')" class="w-full sm:w-1/2 bg-emerald-400 hover:bg-emerald-500 text-white text-2xl font-bold py-8 px-6 rounded-[2rem] shadow-[0_8px_0_rgb(16,185,129)] hover:shadow-[0_4px_0_rgb(16,185,129)] hover:translate-y-1 transition-all">
+                                <i class="fa-solid fa-book-open mb-4 text-5xl block"></i> Poznaję słowa
+                            </button>
+                            <button onclick="goToCategorySelect('play')" class="w-full sm:w-1/2 bg-indigo-400 hover:bg-indigo-500 text-white text-2xl font-bold py-8 px-6 rounded-[2rem] shadow-[0_8px_0_rgb(99,102,241)] hover:shadow-[0_4px_0_rgb(99,102,241)] hover:translate-y-1 transition-all">
+                                <i class="fa-solid fa-gamepad mb-4 text-5xl block"></i> Gramy!
+                            </button>
+                        </div>
+                    </div>
+                `;
+            } 
+            else if (currentState.view === 'categorySelect') {
+                let modeText = currentState.mode === 'learn' ? "Wybierz temat (Nauka)" : "Wybierz misję (Gry)";
+                let modeIcon = currentState.mode === 'learn' ? "fa-book-open" : "fa-gamepad";
+                let modeColor = currentState.mode === 'learn' ? "text-emerald-500" : "text-indigo-500";
+                
+                let html = `
+                    <div class="w-full h-full flex flex-col">
+                        <div class="flex justify-between items-center mb-6">
+                            <button onclick="goHome()" class="text-slate-500 hover:text-slate-800 font-bold text-lg bg-white px-4 py-2 rounded-xl shadow-sm">
+                                <i class="fa-solid fa-arrow-left mr-2"></i> Wróć
+                            </button>
+                            <h2 class="text-2xl sm:text-3xl font-black text-center ${modeColor}">
+                                <i class="fa-solid ${modeIcon} mr-2"></i> ${modeText}
+                            </h2>
+                            <div class="w-20 hidden sm:block"></div>
+                        </div>
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 pb-10">
+                `;
+                
+                for (const key in vocabulary) {
+                    const cat = vocabulary[key];
+                    if (cat.minLevel > currentState.currentLevel) continue;
+                    const availableWords = getWordsForCurrentLevel(key);
+                    if (availableWords.length === 0) continue;
+
+                    const isCompleted = currentState.completedCategories.includes(key) && currentState.mode === 'play';
+                    const speBadge = (isCompleted && !currentState.settings.hideScores) ? '<div class="absolute top-2 right-2 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full z-20 shadow-md"><i class="fa-solid fa-check"></i> Odznaka</div>' : '';
+                    
+                    html += `
+                        <div onclick="selectCategory('${key}')" class="${cat.color} card cursor-pointer rounded-3xl p-4 sm:p-6 text-center text-white relative overflow-hidden group">
+                            ${speBadge}
+                            <div class="absolute -right-4 -top-4 opacity-20 transform group-hover:scale-125 transition-transform duration-300">
+                                <i class="fa-solid ${cat.icon} text-8xl"></i>
+                            </div>
+                            <i class="fa-solid ${cat.icon} text-4xl sm:text-5xl mb-3 sm:mb-4 relative z-10"></i>
+                            <h3 class="text-lg sm:text-xl font-bold relative z-10">${cat.title}</h3>
+                        </div>
+                    `;
+                }
+                html += `</div></div>`;
+                appContainer.innerHTML = html;
+            }
+            else if (currentState.view === 'gameSelect') {
+                const cat = vocabulary[currentState.category];
+                const showSortGame = currentState.currentLevel >= 2;
+
+                appContainer.innerHTML = `
+                    <div class="w-full text-center h-full flex flex-col justify-center max-w-4xl mx-auto">
+                        <div class="flex justify-between items-center mb-8">
+                            <button onclick="goToCategorySelect('play')" class="text-slate-500 hover:text-slate-800 font-bold text-lg bg-white px-4 py-2 rounded-xl shadow-sm">
+                                <i class="fa-solid fa-arrow-left mr-2"></i> Tematy
+                            </button>
+                            <h2 class="text-3xl font-black text-indigo-600">
+                                Temat: <span class="${cat.color.replace('bg-', 'text-')}">${cat.title}</span>
+                            </h2>
+                            <div class="w-24"></div>
+                        </div>
+                        
+                        <p class="text-xl text-slate-600 mb-8 font-bold">Wybierz w co gramy!</p>
+
+                        <div class="grid grid-cols-1 ${showSortGame ? 'md:grid-cols-3' : 'sm:grid-cols-2'} gap-6">
+                            <div onclick="startGameType('guess')" class="bg-blue-400 hover:bg-blue-500 card cursor-pointer rounded-3xl p-8 text-center text-white shadow-[0_8px_0_rgb(59,130,246)] transition-all">
+                                <i class="fa-solid fa-ear-listen text-6xl mb-4"></i>
+                                <h3 class="text-2xl font-black">Zgadnij!</h3>
+                                <p class="text-sm opacity-90 mt-2 font-bold">Słuchaj i wybieraj z 3 obrazków.</p>
+                            </div>
+                            
+                            <div onclick="startGameType('memory')" class="bg-purple-400 hover:bg-purple-500 card cursor-pointer rounded-3xl p-8 text-center text-white shadow-[0_8px_0_rgb(168,85,247)] transition-all">
+                                <i class="fa-solid fa-clone text-6xl mb-4"></i>
+                                <h3 class="text-2xl font-black">Pamięć!</h3>
+                                <p class="text-sm opacity-90 mt-2 font-bold">Szukaj par: Obrazek + Słowo.</p>
+                            </div>
+
+                            ${showSortGame ? `
+                            <div onclick="startGameType('sort')" class="bg-amber-400 hover:bg-amber-500 card cursor-pointer rounded-3xl p-8 text-center text-white shadow-[0_8px_0_rgb(245,158,11)] transition-all">
+                                <i class="fa-solid fa-basket-shopping text-6xl mb-4"></i>
+                                <h3 class="text-2xl font-black">Sortuj!</h3>
+                                <p class="text-sm opacity-90 mt-2 font-bold">Posłuchaj i wrzuć do koszyka.</p>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }
+            else if (currentState.view === 'learn') {
+                const cat = vocabulary[currentState.category];
+                const words = getWordsForCurrentLevel(currentState.category);
+
+                let html = `
+                    <div class="w-full text-center h-full flex flex-col">
+                         <div class="flex justify-between items-center mb-4 sm:mb-6">
+                            <button onclick="goToCategorySelect('learn')" class="text-slate-500 hover:text-slate-800 font-bold text-lg bg-white px-4 py-2 rounded-xl shadow-sm">
+                                <i class="fa-solid fa-arrow-left mr-2"></i> Wróć
+                            </button>
+                            <h2 class="text-2xl sm:text-3xl font-black ${cat.color.replace('bg-', 'text-')}">${cat.title}</h2>
+                            <div class="w-24 hidden sm:block"></div>
+                        </div>
+                        <div class="bg-indigo-50 text-indigo-700 py-2 px-4 rounded-full inline-block mx-auto mb-6 font-bold text-sm sm:text-base border border-indigo-100">
+                            <i class="fa-solid fa-hand-pointer mr-2"></i> Kliknij obrazek, aby usłyszeć słówko!
+                        </div>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-6 w-full pb-10">
+                `;
+                words.forEach(word => {
+                    const safeWord = word.en.replace(/'/g, "\\'");
+                    html += `
+                        <div onclick="speakAndAnimate(this, '${safeWord}')" class="bg-white card cursor-pointer rounded-3xl p-4 sm:p-6 text-center border-4 border-slate-100 flex flex-col items-center justify-center aspect-square hover:border-indigo-200 transition-colors">
+                            <div class="text-6xl sm:text-7xl mb-2 sm:mb-4 transition-transform duration-200 emoji-container">${word.emoji}</div>
+                            <div class="text-slate-400 font-bold text-sm sm:text-base capitalize">${word.en}</div>
+                        </div>
+                    `;
+                });
+                html += `</div></div>`;
+                appContainer.innerHTML = html;
+            }
+            else if (currentState.view === 'playGuess') {
+                const progressPercentage = (currentState.currentWordIndex / currentState.playWords.length) * 100;
+
+                let html = `
+                    <div class="w-full max-w-4xl mx-auto flex flex-col items-center h-full">
+                        <div class="w-full flex justify-between items-center mb-6">
+                            <button onclick="selectCategory(currentState.category)" class="text-slate-400 hover:text-slate-600 bg-white p-2 rounded-full shadow-sm">
+                                <i class="fa-solid fa-times text-xl w-8 h-8 flex items-center justify-center"></i>
+                            </button>
+                            <div class="w-2/3 bg-white rounded-full h-4 sm:h-6 overflow-hidden border-2 border-slate-100 shadow-inner">
+                                <div class="bg-yellow-400 h-full rounded-full transition-all duration-500 relative" style="width: ${progressPercentage}%">
+                                    <div class="absolute inset-0 bg-white opacity-20" style="background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.5) 10px, rgba(255,255,255,0.5) 20px);"></div>
+                                </div>
+                            </div>
+                            <div class="w-10"></div>
+                        </div>
+
+                        <div class="flex-grow flex flex-col items-center justify-center w-full mt-2 sm:mt-8">
+                            <button id="main-audio-btn" onclick="speakCurrentGuessWord()" class="bg-blue-500 hover:bg-blue-600 text-white rounded-full w-20 h-20 sm:w-28 sm:h-28 flex items-center justify-center text-4xl sm:text-5xl mb-6 shadow-[0_8px_0_rgb(37,99,235)] transition-all animate-float">
+                                <i class="fa-solid fa-volume-high"></i>
+                            </button>
+                            <p class="text-slate-500 font-bold mb-6 sm:mb-10 text-lg sm:text-xl bg-white px-6 py-2 rounded-full shadow-sm border border-slate-100">Co słyszysz? Kliknij!</p>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 w-full max-w-3xl">
+                `;
+                currentState.options.forEach((opt, index) => {
+                    html += `
+                        <div id="option-${index}" onclick="checkGuessAnswer(${index})" class="bg-white card cursor-pointer rounded-3xl p-8 sm:p-10 text-center border-4 border-slate-100 flex flex-col items-center justify-center aspect-[4/3] sm:aspect-square transition-all">
+                            <div class="text-7xl sm:text-8xl">${opt.emoji}</div>
+                        </div>
+                    `;
+                });
+                html += `</div></div></div>`;
+                appContainer.innerHTML = html;
+                setTimeout(speakCurrentGuessWord, 400);
+            }
+            else if (currentState.view === 'playMemory') {
+                const totalPairs = currentState.memoryCards.length / 2;
+                const progressPercentage = (currentState.memoryMatches / totalPairs) * 100;
+                
+                let html = `
+                    <div class="w-full max-w-4xl mx-auto flex flex-col items-center h-full">
+                        <div class="w-full flex justify-between items-center mb-6">
+                            <button onclick="selectCategory(currentState.category)" class="text-slate-400 hover:text-slate-600 bg-white p-2 rounded-full shadow-sm">
+                                <i class="fa-solid fa-times text-xl w-8 h-8 flex items-center justify-center"></i>
+                            </button>
+                            <div class="w-2/3 bg-white rounded-full h-4 sm:h-6 overflow-hidden border-2 border-slate-100 shadow-inner">
+                                <div class="bg-yellow-400 h-full rounded-full transition-all duration-500 relative" style="width: ${progressPercentage}%">
+                                    <div class="absolute inset-0 bg-white opacity-20" style="background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.5) 10px, rgba(255,255,255,0.5) 20px);"></div>
+                                </div>
+                            </div>
+                            <div class="w-10"></div>
+                        </div>
+                        <p class="text-slate-500 font-bold mb-4 text-lg bg-white px-6 py-2 rounded-full shadow-sm border border-slate-100">Znajdź pary: Obrazek i Słowo!</p>
+                        
+                        <div class="grid grid-cols-3 sm:grid-cols-4 gap-3 sm:gap-4 w-full pb-10">
+                `;
+                
+                currentState.memoryCards.forEach((card, index) => {
+                    let isFlippedCls = card.flipped || card.matched ? 'flipped' : '';
+                    let isMatchedCls = card.matched ? 'matched' : '';
+                    let innerContent = card.type === 'emoji' 
+                        ? `<div class="text-5xl sm:text-6xl">${card.w.emoji}</div>` 
+                        : `<div class="text-xl sm:text-2xl font-black capitalize text-indigo-600 px-2">${card.w.en}</div>`;
+
+                    html += `
+                        <div class="memory-card ${isFlippedCls} ${isMatchedCls}" onclick="flipMemoryCard(${index})">
+                            <div class="memory-card-inner">
+                                <div class="memory-card-front"></div>
+                                <div class="memory-card-back">
+                                    ${innerContent}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += `</div></div>`;
+                appContainer.innerHTML = html;
+            }
+            else if (currentState.view === 'playSort') {
+                const totalItems = currentState.sortItems.length;
+                const progressPercentage = (currentState.sortIndex / totalItems) * 100;
+                
+                let html = `
+                    <div class="w-full max-w-4xl mx-auto flex flex-col items-center h-full">
+                        <div class="w-full flex justify-between items-center mb-6">
+                            <button onclick="selectCategory(currentState.category)" class="text-slate-400 hover:text-slate-600 bg-white p-2 rounded-full shadow-sm">
+                                <i class="fa-solid fa-times text-xl w-8 h-8 flex items-center justify-center"></i>
+                            </button>
+                            <div class="w-2/3 bg-white rounded-full h-4 sm:h-6 overflow-hidden border-2 border-slate-100 shadow-inner">
+                                <div class="bg-yellow-400 h-full rounded-full transition-all duration-500 relative" style="width: ${progressPercentage}%">
+                                    <div class="absolute inset-0 bg-white opacity-20" style="background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.5) 10px, rgba(255,255,255,0.5) 20px);"></div>
+                                </div>
+                            </div>
+                            <div class="w-10"></div>
+                        </div>
+                        
+                        <p class="text-slate-500 font-bold mb-4 text-lg bg-white px-6 py-2 rounded-full shadow-sm border border-slate-100">Kliknij aby usłyszeć i przypisz do koszyka!</p>
+                `;
+
+                if(currentState.sortIndex < totalItems) {
+                    let currentItem = currentState.sortItems[currentState.sortIndex];
+                    let cat1 = vocabulary[currentState.sortCats[0]];
+                    let cat2 = vocabulary[currentState.sortCats[1]];
+                    const safeWord = currentItem.en.replace(/'/g, "\\'");
+
+                    html += `
+                        <div class="flex-grow flex flex-col items-center justify-center w-full w-full">
+                            <!-- Środkowy element -->
+                            <div id="sort-item" onclick="playHighQualityVoice('${safeWord}')" class="bg-white rounded-full w-40 h-40 sm:w-48 sm:h-48 flex items-center justify-center text-7xl sm:text-8xl mb-8 shadow-[0_10px_25px_rgba(0,0,0,0.1)] border-8 border-slate-100 cursor-pointer animate-float z-10 transition-all">
+                                ${currentItem.emoji}
+                            </div>
+                            
+                            <!-- Koszyki na dole -->
+                            <div class="grid grid-cols-2 gap-6 w-full mt-4">
+                                <div onclick="sortItemClick('${currentState.sortCats[0]}')" class="${cat1.color} card cursor-pointer rounded-[2rem] p-6 text-center text-white border-b-8 border-black/20 flex flex-col items-center justify-end h-40 sm:h-48 group">
+                                    <i class="fa-solid fa-box-open text-6xl opacity-30 absolute group-hover:scale-110 transition-transform"></i>
+                                    <div class="text-4xl mb-2 z-10 bg-white/20 p-3 rounded-full w-16 h-16 flex items-center justify-center backdrop-blur-sm"><i class="fa-solid ${cat1.icon}"></i></div>
+                                    <h3 class="text-xl font-black z-10">${cat1.title}</h3>
+                                </div>
+                                <div onclick="sortItemClick('${currentState.sortCats[1]}')" class="${cat2.color} card cursor-pointer rounded-[2rem] p-6 text-center text-white border-b-8 border-black/20 flex flex-col items-center justify-end h-40 sm:h-48 group">
+                                    <i class="fa-solid fa-box-open text-6xl opacity-30 absolute group-hover:scale-110 transition-transform"></i>
+                                    <div class="text-4xl mb-2 z-10 bg-white/20 p-3 rounded-full w-16 h-16 flex items-center justify-center backdrop-blur-sm"><i class="fa-solid ${cat2.icon}"></i></div>
+                                    <h3 class="text-xl font-black z-10">${cat2.title}</h3>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    setTimeout(() => { playHighQualityVoice(currentItem.en); }, 400);
+                }
+
+                html += `</div>`;
+                appContainer.innerHTML = html;
+            }
+            else if (currentState.view === 'reward') {
+                const cat = vocabulary[currentState.category];
+                const hideScoreHTML = currentState.settings.hideScores ? '' : `
+                    <div class="flex items-center justify-center gap-2 mb-8 bg-yellow-50 px-6 py-3 rounded-2xl border-2 border-yellow-200">
+                        <span class="text-2xl font-bold text-slate-600">Zdobyto:</span>
+                        <span class="text-3xl font-black text-yellow-500">+${currentState.score} <i class="fa-solid fa-star"></i></span>
+                    </div>
+                `;
+
+                appContainer.innerHTML = `
+                    <div class="text-center mt-10 flex flex-col items-center max-w-2xl mx-auto w-full bg-white p-8 sm:p-12 rounded-[3rem] shadow-xl border-4 ${cat.color.replace('bg-', 'border-')}">
+                        <div class="text-8xl sm:text-9xl mb-6 animate-pop">🏆</div>
+                        <h2 class="text-4xl md:text-5xl font-black text-slate-800 mb-2">Great Job!</h2>
+                        <h3 class="text-2xl font-bold ${cat.color.replace('bg-', 'text-')} mb-6">Misja wykonana: ${cat.title}</h3>
+                        
+                        ${hideScoreHTML}
+                        
+                        <div class="flex flex-col sm:flex-row gap-4 w-full">
+                            <button onclick="goToCategorySelect('play')" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xl font-bold py-5 px-6 rounded-3xl shadow-[0_6px_0_rgb(203,213,225)] transition-all">
+                                <i class="fa-solid fa-list mr-2"></i> Inne tematy
+                            </button>
+                            <button onclick="selectCategory(currentState.category)" class="flex-1 ${cat.color} hover:opacity-90 text-white text-xl font-bold py-5 px-6 rounded-3xl shadow-[0_6px_0_rgba(0,0,0,0.2)] transition-all">
+                                <i class="fa-solid fa-gamepad mr-2"></i> Więcej gier
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                if(!currentState.settings.reduceMotion && !currentState.settings.hideScores) {
+                    fireConfetti();
+                }
+                playSoundEffect('correct');
+            }
+        }
+
+        // --- Nawigacja i Przepływ ---
+        function selectLevel(lvl) { playSoundEffect('pop'); currentState.currentLevel = lvl; currentState.view = 'home'; render(); }
+        function goToLevelSelect() { playSoundEffect('pop'); currentState.view = 'levelSelect'; render(); }
+        function goHome() { playSoundEffect('pop'); currentState.view = 'home'; render(); }
+        function goToCategorySelect(mode) { playSoundEffect('pop'); if(audioCtx.state === 'suspended') audioCtx.resume(); currentState.mode = mode; currentState.view = 'categorySelect'; render(); }
+        function selectCategory(catKey) { playSoundEffect('pop'); currentState.category = catKey; currentState.view = currentState.mode === 'learn' ? 'learn' : 'gameSelect'; render(); }
+        function startGameType(type) { playSoundEffect('pop'); currentState.gameType = type; if (type === 'guess') startGuessGame(); else if (type === 'memory') startMemoryGame(); else if (type === 'sort') startSortGame(); }
+        function handleWin() { if (!currentState.completedCategories.includes(currentState.category)) { currentState.completedCategories.push(currentState.category); saveProgress(); } currentState.view = 'reward'; render(); }
+
+        // --- Logika Gier (Uproszczona wywołania) ---
+        function speakAndAnimate(element, word) {
+            const emojiDiv = element.querySelector('.emoji-container');
+            if(!currentState.settings.reduceMotion) {
+                emojiDiv.classList.remove('animate-pop'); void emojiDiv.offsetWidth; emojiDiv.classList.add('animate-pop');
+                element.classList.add('is-playing-audio');
+            }
+            playHighQualityVoice(word, () => { element.classList.remove('is-playing-audio'); });
+        }
+
+        function startGuessGame() { currentState.score = 0; currentState.currentWordIndex = 0; let words = [...getWordsForCurrentLevel(currentState.category)]; currentState.playWords = shuffleArray(words).slice(0, 8); setupNextGuessQuestion(); currentState.view = 'playGuess'; render(); }
+        function setupNextGuessQuestion() { const currentWord = currentState.playWords[currentState.currentWordIndex]; let distractors = getWordsForCurrentLevel(currentState.category).filter(w => w.en !== currentWord.en); distractors = shuffleArray(distractors).slice(0, 2); currentState.options = shuffleArray([currentWord, ...distractors]); }
+        function speakCurrentGuessWord() { const word = currentState.playWords[currentState.currentWordIndex].en; const btn = document.getElementById('main-audio-btn'); if(btn && !currentState.settings.reduceMotion) btn.classList.add('is-playing-audio'); playHighQualityVoice(word, () => { if(btn) btn.classList.remove('is-playing-audio'); }); }
+
+        let isChecking = false;
+        function checkGuessAnswer(selectedIndex) {
+            if (isChecking) return;
+            isChecking = true;
+            const selectedOption = currentState.options[selectedIndex];
+            const currentWord = currentState.playWords[currentState.currentWordIndex];
+            const cardEl = document.getElementById(`option-${selectedIndex}`);
+
+            if (selectedOption.en === currentWord.en) {
+                playSoundEffect('correct');
+                cardEl.classList.remove('border-slate-100'); cardEl.classList.add('border-green-500', 'bg-green-50');
+                if(!currentState.settings.reduceMotion) cardEl.classList.add('animate-pop');
+                currentState.score += 2; currentState.totalStars += 2; saveProgress();
+                setTimeout(() => { currentState.currentWordIndex++; if (currentState.currentWordIndex >= currentState.playWords.length) handleWin(); else { setupNextGuessQuestion(); render(); } isChecking = false; }, 1200);
+            } else {
+                playSoundEffect('wrong');
+                cardEl.classList.add('opacity-50', 'border-red-300', 'bg-red-50');
+                if(!currentState.settings.reduceMotion) cardEl.classList.add('animate-shake');
+                setTimeout(() => { cardEl.classList.remove('animate-shake', 'opacity-50', 'border-red-300', 'bg-red-50'); isChecking = false; }, 800);
+            }
+        }
+
+        function startMemoryGame() { currentState.score = 0; let gameWords = shuffleArray([...getWordsForCurrentLevel(currentState.category)]).slice(0, Math.min(6, getWordsForCurrentLevel(currentState.category).length)); let cards = []; gameWords.forEach((w, idx) => { cards.push({ id: `e${idx}`, w: w, type: 'emoji', matched: false, flipped: false }); cards.push({ id: `t${idx}`, w: w, type: 'text', matched: false, flipped: false }); }); currentState.memoryCards = shuffleArray(cards); currentState.memoryFlipped = []; currentState.memoryMatches = 0; currentState.isCheckingMemory = false; currentState.view = 'playMemory'; render(); }
+        function flipMemoryCard(idx) { if (currentState.isCheckingMemory) return; let card = currentState.memoryCards[idx]; if (card.flipped || card.matched) return; card.flipped = true; currentState.memoryFlipped.push(idx); playHighQualityVoice(card.w.en); render(); if (currentState.memoryFlipped.length === 2) { currentState.isCheckingMemory = true; setTimeout(checkMemoryMatch, 1000); } }
+        function checkMemoryMatch() { const idx1 = currentState.memoryFlipped[0]; const idx2 = currentState.memoryFlipped[1]; const card1 = currentState.memoryCards[idx1]; const card2 = currentState.memoryCards[idx2]; if (card1.w.en === card2.w.en) { playSoundEffect('correct'); card1.matched = true; card2.matched = true; currentState.memoryMatches++; currentState.score += 3; currentState.totalStars += 3; saveProgress(); if (currentState.memoryMatches === currentState.memoryCards.length / 2) { setTimeout(() => { handleWin(); }, 800); return; } } else { playSoundEffect('wrong'); card1.flipped = false; card2.flipped = false; } currentState.memoryFlipped = []; currentState.isCheckingMemory = false; render(); }
+
+        function startSortGame() { currentState.score = 0; let cat1Key = currentState.category; let availableCats = Object.keys(vocabulary).filter(k => vocabulary[k].minLevel <= currentState.currentLevel && vocabulary[k].words.filter(w => w.minLevel <= currentState.currentLevel).length > 0); let possibleSortPartners = availableCats.filter(k => k !== cat1Key); let cat2Key = possibleSortPartners[Math.floor(Math.random() * possibleSortPartners.length)]; let words1 = shuffleArray([...getWordsForCurrentLevel(cat1Key)]).slice(0, 5).map(w => ({...w, cat: cat1Key})); let words2 = shuffleArray([...getWordsForCurrentLevel(cat2Key)]).slice(0, 5).map(w => ({...w, cat: cat2Key})); currentState.sortItems = shuffleArray([...words1, ...words2]); currentState.sortIndex = 0; currentState.sortCats = [cat1Key, cat2Key]; currentState.view = 'playSort'; render(); }
+        function sortItemClick(selectedCatKey) { if(isChecking) return; isChecking = true; let currentItem = currentState.sortItems[currentState.sortIndex]; let itemEl = document.getElementById('sort-item'); if (selectedCatKey === currentItem.cat) { playSoundEffect('correct'); if(!currentState.settings.reduceMotion) itemEl.classList.add('scale-0', 'opacity-0'); else itemEl.style.display = 'none'; currentState.score += 2; currentState.totalStars += 2; saveProgress(); setTimeout(() => { currentState.sortIndex++; isChecking = false; if(currentState.sortIndex >= currentState.sortItems.length) handleWin(); else render(); }, 400); } else { playSoundEffect('wrong'); itemEl.classList.add('border-red-400', 'bg-red-50'); if(!currentState.settings.reduceMotion) itemEl.classList.add('animate-shake'); setTimeout(() => { itemEl.classList.remove('animate-shake', 'border-red-400', 'bg-red-50'); isChecking = false; }, 600); } }
+
+        function shuffleArray(array) { let curId = array.length; while (0 !== curId) { let randId = Math.floor(Math.random() * curId); curId -= 1; let tmp = array[curId]; array[curId] = array[randId]; array[randId] = tmp; } return array; }
+        function fireConfetti() { const canvas = document.getElementById('confetti-canvas'); const ctx = canvas.getContext('2d'); canvas.width = window.innerWidth; canvas.height = window.innerHeight; let particles = []; const colors = ['#fce18a', '#ff726d', '#b48def', '#f4306d', '#42b883', '#3b82f6', '#fbbf24']; for (let i = 0; i < 150; i++) { particles.push({ x: canvas.width / 2, y: canvas.height / 2, r: Math.random() * 8 + 3, dx: Math.random() * 30 - 15, dy: Math.random() * -30 - 10, color: colors[Math.floor(Math.random() * colors.length)], tilt: Math.floor(Math.random() * 10) - 10, tiltAngleInc: (Math.random() * 0.07) + 0.05, tiltAngle: 0 }); } let animationId; function renderConfetti() { ctx.clearRect(0, 0, canvas.width, canvas.height); let remaining = false; particles.forEach((p) => { p.tiltAngle += p.tiltAngleInc; p.y += (Math.cos(p.tiltAngle) + 1 + p.r / 2) / 2; p.x += Math.sin(p.tiltAngle) * 2; p.dy += 0.3; p.y += p.dy; p.x += p.dx; if (p.y <= canvas.height) remaining = true; ctx.beginPath(); ctx.lineWidth = p.r; ctx.strokeStyle = p.color; ctx.moveTo(p.x + p.tilt + p.r, p.y); ctx.lineTo(p.x + p.tilt, p.y + p.tilt + p.r); ctx.stroke(); }); if (remaining) { animationId = requestAnimationFrame(renderConfetti); } else { ctx.clearRect(0, 0, canvas.width, canvas.height); } } renderConfetti(); }
+        window.addEventListener('resize', () => { const canvas = document.getElementById('confetti-canvas'); if(canvas) { canvas.width = window.innerWidth; canvas.height = window.innerHeight; } });
+
+        // Start aplikacji z uwzględnieniem zapisanych ustawień SPE
+        applySettingsToUI();
+        render();
+    </script>
+</body>
+</html>
