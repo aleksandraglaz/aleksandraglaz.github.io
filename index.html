@@ -456,6 +456,15 @@
         const starCountEl = document.getElementById('star-count');
         const headerLevelBadge = document.getElementById('header-level-badge');
         let currentAudio = null;
+        let systemVoices = [];
+
+        // --- Inicjalizacja Głosów Systemowych (ładuje lepsze głosy w tle) ---
+        if ('speechSynthesis' in window) {
+            systemVoices = window.speechSynthesis.getVoices();
+            window.speechSynthesis.onvoiceschanged = () => {
+                systemVoices = window.speechSynthesis.getVoices();
+            };
+        }
 
         // --- USTAWIENIA SPE (Logika) ---
         function toggleSettingsModal() {
@@ -504,27 +513,47 @@
         function playHighQualityVoice(text, onComplete = null) {
             if (currentAudio) { currentAudio.pause(); currentAudio = null; }
 
+            // Zapobiega podwójnemu odtworzeniu słowa w przypadku błędu z serwerem Google
+            let fallbackTriggered = false;
+            const triggerFallback = () => {
+                if (fallbackTriggered) return;
+                fallbackTriggered = true;
+                fallbackToSystemVoice(text, onComplete);
+            };
+
             const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&tl=en-GB&client=tw-ob&q=${encodeURIComponent(text)}`;
             currentAudio = new Audio(url);
             currentAudio.onended = () => { if (onComplete) onComplete(); };
-            currentAudio.onerror = () => { fallbackToSystemVoice(text, onComplete); };
-            currentAudio.play().catch(e => { fallbackToSystemVoice(text, onComplete); });
+            
+            // Obsługa błędu sieciowego (np. CORS na GitHub Pages)
+            currentAudio.onerror = triggerFallback;
+            currentAudio.play().catch(triggerFallback);
         }
 
         function fallbackToSystemVoice(text, onComplete) {
             if ('speechSynthesis' in window) {
+                // Przerywamy poprzednie mówienie, aby nie było "kolejkowania"
+                window.speechSynthesis.cancel(); 
+                
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.lang = 'en-GB'; 
                 utterance.rate = 0.9; 
                 utterance.pitch = 1.1;
                 
-                const voices = window.speechSynthesis.getVoices();
-                const bestVoice = voices.find(v => v.lang === 'en-GB' && (v.name.includes('Google') || v.name.includes('Natural'))) || voices.find(v => v.lang === 'en-GB');
+                // Szukamy najlepszego z dostępnych brytyjskich głosów
+                let bestVoice = systemVoices.find(v => v.lang === 'en-GB' && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Hazel') || v.name.includes('Martha')));
+                if (!bestVoice) bestVoice = systemVoices.find(v => v.lang.startsWith('en-GB'));
+                if (!bestVoice) bestVoice = systemVoices.find(v => v.lang.startsWith('en-US'));
+                if (!bestVoice) bestVoice = systemVoices[0];
+                
                 if (bestVoice) utterance.voice = bestVoice;
                 
                 utterance.onend = () => { if(onComplete) onComplete(); };
+                utterance.onerror = () => { if(onComplete) onComplete(); };
                 window.speechSynthesis.speak(utterance);
-            } else { if (onComplete) onComplete(); }
+            } else { 
+                if (onComplete) onComplete(); 
+            }
         }
 
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
